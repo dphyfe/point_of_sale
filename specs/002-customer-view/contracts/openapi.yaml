@@ -1,0 +1,698 @@
+openapi: 3.0.3
+info:
+  title: POS Customer View API
+  version: 1.0.0
+  description: |
+    HTTP contract for the POS Customer View subsystem. Bearer JWT auth from
+    the surrounding POS auth service. Token claims: `sub` (user id),
+    `tenant_id`, `roles[]` from the canonical set
+    (Cashier, Receiver, Inventory Clerk, Store Manager, Customer Service,
+    Marketing, Admin), and the visibility scope claims
+    `visibility_scope` (`all_stores`|`own_stores`) and `assigned_site_ids[]`.
+
+    Every endpoint is multi-tenant scoped server-side; clients never send
+    `tenant_id` in the request body or path.
+servers:
+  - url: https://{host}/v1
+    variables:
+      host: { default: api.example.com }
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Current customer `version` value for optimistic concurrency (R5).
+      schema: { type: integer, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+  schemas:
+    UUID: { type: string, format: uuid }
+    Money: { type: string, pattern: '^-?\d+(\.\d{1,4})?$' }
+    Quantity: { type: string, pattern: '^-?\d+(\.\d{1,3})?$' }
+    ContactType: { type: string, enum: [individual, company] }
+    PreferredChannel: { type: string, enum: [email, sms, none] }
+    CustomerState: { type: string, enum: [active, inactive, merged, anonymized] }
+    AddressKind: { type: string, enum: [billing, shipping, service] }
+    Channel: { type: string, enum: [email, sms] }
+    Purpose: { type: string, enum: [transactional, marketing] }
+    ConsentState: { type: string, enum: [opted_in, opted_out, unset] }
+    ConsentSource: { type: string, enum: [pos, online_portal, support, provider_unsubscribe, import] }
+    MessageStatus: { type: string, enum: [queued, sent, delivered, bounced, failed, retrying] }
+    TransactionKind: { type: string, enum: [sale, return, exchange, service_order] }
+    TransactionStatus: { type: string, enum: [completed, voided, refunded, in_progress] }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: |
+            Stable machine code. Known values include:
+            `validation_failed`, `not_found`, `conflict`,
+            `stale_version`, `consent_required`, `merge_invalid`,
+            `forbidden`, `provider_failed`, `already_processed`.
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+    Page:
+      type: object
+      required: [page, page_size, total]
+      properties:
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    CustomerInput:
+      type: object
+      required: [contact_type]
+      properties:
+        client_request_id: { $ref: '#/components/schemas/UUID' }
+        contact_type: { $ref: '#/components/schemas/ContactType' }
+        first_name: { type: string, nullable: true }
+        last_name: { type: string, nullable: true }
+        company_name: { type: string, nullable: true }
+        primary_phone: { type: string, nullable: true }
+        secondary_phone: { type: string, nullable: true }
+        email: { type: string, format: email, nullable: true }
+        preferred_channel: { $ref: '#/components/schemas/PreferredChannel' }
+        language: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        external_loyalty_id: { type: string, nullable: true }
+        external_crm_id: { type: string, nullable: true }
+        tax_id: { type: string, nullable: true }
+        date_of_birth: { type: string, format: date, nullable: true }
+    Customer:
+      type: object
+      required: [id, contact_type, state, version, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        version: { type: integer }
+        contact_type: { $ref: '#/components/schemas/ContactType' }
+        first_name: { type: string, nullable: true }
+        last_name: { type: string, nullable: true }
+        company_name: { type: string, nullable: true }
+        display_name: { type: string }
+        primary_phone: { type: string, nullable: true }
+        secondary_phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        preferred_channel: { $ref: '#/components/schemas/PreferredChannel' }
+        language: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        external_loyalty_id: { type: string, nullable: true }
+        external_crm_id: { type: string, nullable: true }
+        tax_id_masked: { type: string, nullable: true, description: "Last 4 only; full value never returned." }
+        date_of_birth: { type: string, format: date, nullable: true }
+        state: { $ref: '#/components/schemas/CustomerState' }
+        merged_into: { $ref: '#/components/schemas/UUID', nullable: true }
+        last_purchase_at: { type: string, format: date-time, nullable: true }
+        last_store_visited: { type: string, nullable: true }
+        lifetime_spend: { $ref: '#/components/schemas/Money' }
+        visit_count: { type: integer }
+        average_order_value: { $ref: '#/components/schemas/Money' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CustomerAddressInput:
+      type: object
+      required: [kind, line1, country]
+      properties:
+        kind: { $ref: '#/components/schemas/AddressKind' }
+        is_default_for_kind: { type: boolean, default: false }
+        line1: { type: string }
+        line2: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        region: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+        country: { type: string, description: "ISO-3166 alpha-2" }
+    CustomerAddress:
+      allOf:
+        - $ref: '#/components/schemas/CustomerAddressInput'
+        - type: object
+          required: [id]
+          properties:
+            id: { $ref: '#/components/schemas/UUID' }
+
+    HistoryRow:
+      type: object
+      required: [transaction_id, transaction_kind, occurred_at, store_name, total, status]
+      properties:
+        transaction_id: { $ref: '#/components/schemas/UUID' }
+        transaction_kind: { $ref: '#/components/schemas/TransactionKind' }
+        occurred_at: { type: string, format: date-time }
+        store_name: { type: string }
+        register_id: { type: string, nullable: true }
+        ticket_id: { type: string }
+        total: { $ref: '#/components/schemas/Money' }
+        tax: { $ref: '#/components/schemas/Money' }
+        payment_methods:
+          type: array
+          items: { type: string }
+        status: { $ref: '#/components/schemas/TransactionStatus' }
+    HistoryLine:
+      type: object
+      required: [sku_id, sku_code, description, qty, unit_price, line_total]
+      properties:
+        sku_id: { $ref: '#/components/schemas/UUID' }
+        sku_code: { type: string }
+        description: { type: string }
+        qty: { $ref: '#/components/schemas/Quantity' }
+        unit_price: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        tax: { $ref: '#/components/schemas/Money' }
+        line_total: { $ref: '#/components/schemas/Money' }
+        fulfillment_location_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        serial_numbers:
+          type: array
+          items: { type: string }
+        related_po_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        related_rma_id: { $ref: '#/components/schemas/UUID', nullable: true }
+    HistoryTransactionDetail:
+      allOf:
+        - $ref: '#/components/schemas/HistoryRow'
+        - type: object
+          required: [lines]
+          properties:
+            lines:
+              type: array
+              items: { $ref: '#/components/schemas/HistoryLine' }
+
+    ConsentEventInput:
+      type: object
+      required: [channel, purpose, event_kind, source]
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        purpose: { $ref: '#/components/schemas/Purpose' }
+        event_kind: { type: string, enum: [opted_in, opted_out] }
+        source: { $ref: '#/components/schemas/ConsentSource' }
+        note: { type: string, nullable: true }
+    ConsentEvent:
+      allOf:
+        - $ref: '#/components/schemas/ConsentEventInput'
+        - type: object
+          required: [id, occurred_at]
+          properties:
+            id: { $ref: '#/components/schemas/UUID' }
+            actor_user_id: { $ref: '#/components/schemas/UUID', nullable: true }
+            occurred_at: { type: string, format: date-time }
+    ConsentMatrix:
+      type: object
+      properties:
+        email_transactional: { $ref: '#/components/schemas/ConsentState' }
+        email_marketing: { $ref: '#/components/schemas/ConsentState' }
+        sms_transactional: { $ref: '#/components/schemas/ConsentState' }
+        sms_marketing: { $ref: '#/components/schemas/ConsentState' }
+
+    MessageTemplateInput:
+      type: object
+      required: [code, name, channel, purpose, body_template]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        purpose: { $ref: '#/components/schemas/Purpose' }
+        subject_template: { type: string, nullable: true }
+        body_template: { type: string }
+        enabled: { type: boolean, default: true }
+    MessageTemplate:
+      allOf:
+        - $ref: '#/components/schemas/MessageTemplateInput'
+        - type: object
+          required: [id]
+          properties:
+            id: { $ref: '#/components/schemas/UUID' }
+
+    MessageSendInput:
+      type: object
+      properties:
+        client_request_id: { $ref: '#/components/schemas/UUID' }
+        template_code: { type: string, nullable: true, description: "If null, free-text send (subject/body required)." }
+        channel: { $ref: '#/components/schemas/Channel' }
+        subject: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        related_transaction_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        related_transaction_kind: { $ref: '#/components/schemas/TransactionKind', nullable: true }
+        merge_overrides:
+          type: object
+          additionalProperties: { type: string }
+          description: "Overrides for individual merge fields when composing from a template."
+      required: [channel]
+    MessageStatusEvent:
+      type: object
+      required: [status, occurred_at]
+      properties:
+        status: { $ref: '#/components/schemas/MessageStatus' }
+        occurred_at: { type: string, format: date-time }
+        provider_event_id: { type: string, nullable: true }
+        error_code: { type: string, nullable: true }
+        error_message: { type: string, nullable: true }
+    Message:
+      type: object
+      required: [id, channel, purpose, to_address, body, status, sent_by_user_id, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        customer_id: { $ref: '#/components/schemas/UUID' }
+        template_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        channel: { $ref: '#/components/schemas/Channel' }
+        purpose: { $ref: '#/components/schemas/Purpose' }
+        to_address: { type: string }
+        subject: { type: string, nullable: true }
+        body: { type: string }
+        related_transaction_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        related_transaction_kind: { $ref: '#/components/schemas/TransactionKind', nullable: true }
+        status: { $ref: '#/components/schemas/MessageStatus' }
+        provider: { type: string, nullable: true }
+        provider_message_id: { type: string, nullable: true }
+        sent_by_user_id: { $ref: '#/components/schemas/UUID' }
+        created_at: { type: string, format: date-time }
+        status_history:
+          type: array
+          items: { $ref: '#/components/schemas/MessageStatusEvent' }
+
+    ProfileChangeEntry:
+      type: object
+      required: [id, occurred_at, actor_user_id, field, change_kind]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        occurred_at: { type: string, format: date-time }
+        actor_user_id: { $ref: '#/components/schemas/UUID' }
+        field: { type: string }
+        old_value: { type: string, nullable: true }
+        new_value: { type: string, nullable: true }
+        change_kind: { type: string, enum: [update, merge, deactivate, reactivate, anonymize] }
+
+paths:
+  /customers:
+    get:
+      summary: Search/list customers
+      description: |
+        Multi-key search with normalization (R3). All filters are optional and
+        AND-combined. Search matches against `display_name`, `email_normalized`,
+        `phone_normalized`, `external_loyalty_id`, internal customer id, and —
+        when `q` looks like a ticket id — the existing inventory transaction
+        tables to find an attached customer.
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: "Free-text search term." }
+        - { name: tag, in: query, schema: { type: string }, description: "Filter by a single tag (repeatable)." }
+        - { name: contact_type, in: query, schema: { $ref: '#/components/schemas/ContactType' } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: region, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/CustomerState' } }
+        - { name: last_purchase_from, in: query, schema: { type: string, format: date } }
+        - { name: last_purchase_to, in: query, schema: { type: string, format: date } }
+        - { name: total_spend_min, in: query, schema: { $ref: '#/components/schemas/Money' } }
+        - { name: total_spend_max, in: query, schema: { $ref: '#/components/schemas/Money' } }
+        - { name: opted_in_channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: opted_in_purpose, in: query, schema: { $ref: '#/components/schemas/Purpose' } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Paginated customer list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page, page_size, total]
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Customer' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      summary: Create a customer
+      description: |
+        Roles: Cashier, Customer Service, Manager, Admin. Idempotent on
+        `client_request_id` (R10) — duplicate POST returns the existing
+        customer with `200 OK`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '200':
+          description: Existing customer returned (idempotent replay)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } }
+        '201':
+          description: Customer created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } }
+        '422': { description: Validation failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Email uniqueness conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /customers/{customer_id}:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      summary: Get customer profile
+      description: |
+        If the customer is `merged`, the response is a `307 Temporary Redirect`
+        to the survivor (R4); follow up to depth 5 to handle chains.
+      responses:
+        '200':
+          description: Customer
+          content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } }
+        '307':
+          description: Merged — follow `Location` to the surviving customer
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    put:
+      summary: Update customer profile
+      description: |
+        Roles per field per FR-010. Optimistic concurrency: `If-Match: <version>`
+        required (R5). Field-level changes are recorded in
+        `cust.profile_change` (R6). Sensitive fields (`tax_id`, `date_of_birth`)
+        accepted only with Manager+ role; otherwise `403 forbidden`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '200':
+          description: Updated customer
+          content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } }
+        '409':
+          description: Stale version — caller should re-fetch
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: Validation failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /customers/{customer_id}/deactivate:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    post:
+      summary: Deactivate (FR-012)
+      responses:
+        '204': { description: Deactivated }
+        '403': { description: Forbidden }
+  /customers/{customer_id}/reactivate:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    post:
+      summary: Reactivate
+      responses:
+        '204': { description: Reactivated }
+  /customers/{customer_id}/anonymize:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    post:
+      summary: Anonymize for DSAR (FR-038). Manager+ role.
+      responses:
+        '204': { description: Anonymized }
+        '403': { description: Forbidden }
+
+  /customers/{customer_id}/merge:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' }, description: "Survivor customer id." }
+    post:
+      summary: Merge another customer into this one (FR-014, R4)
+      description: Manager+ role. Atomic.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merged_away_id]
+              properties:
+                merged_away_id: { $ref: '#/components/schemas/UUID' }
+                summary: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Survivor (now with combined history)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } }
+        '409':
+          description: Already merged or invalid (e.g., self-merge)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /customers/{customer_id}/audit:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+    get:
+      summary: Field-level audit trail (FR-011). Manager+ role.
+      responses:
+        '200':
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: object
+                allOf: [{ $ref: '#/components/schemas/Page' }]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProfileChangeEntry' }
+
+  /customers/{customer_id}/addresses:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      summary: List addresses
+      responses:
+        '200':
+          description: Addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CustomerAddress' }
+    post:
+      summary: Add address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerAddressInput' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/CustomerAddress' } } }
+  /customers/{customer_id}/addresses/{address_id}:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+      - { name: address_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    put:
+      summary: Update address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerAddressInput' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/CustomerAddress' } } }
+    delete:
+      summary: Delete address
+      responses:
+        '204': { description: Deleted }
+
+  /customers/{customer_id}/history:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+      - { name: from, in: query, schema: { type: string, format: date } }
+      - { name: to, in: query, schema: { type: string, format: date } }
+      - { name: store_id, in: query, schema: { $ref: '#/components/schemas/UUID' } }
+      - { name: kind, in: query, schema: { $ref: '#/components/schemas/TransactionKind' } }
+      - { name: min_total, in: query, schema: { $ref: '#/components/schemas/Money' } }
+      - { name: sku_id, in: query, schema: { $ref: '#/components/schemas/UUID' } }
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+    get:
+      summary: Paginated purchase history (FR-016..023)
+      responses:
+        '200':
+          description: History rows
+          content:
+            application/json:
+              schema:
+                type: object
+                allOf: [{ $ref: '#/components/schemas/Page' }]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/HistoryRow' }
+  /customers/{customer_id}/history/{transaction_kind}/{transaction_id}:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+      - { name: transaction_kind, in: path, required: true, schema: { $ref: '#/components/schemas/TransactionKind' } }
+      - { name: transaction_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      summary: Drill-down on a single transaction (FR-018)
+      responses:
+        '200':
+          description: Transaction with line items
+          content: { application/json: { schema: { $ref: '#/components/schemas/HistoryTransactionDetail' } } }
+        '404': { description: Not found }
+
+  /customers/{customer_id}/consent:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      summary: Current consent matrix + history
+      responses:
+        '200':
+          description: Consent state and event history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current: { $ref: '#/components/schemas/ConsentMatrix' }
+                  history:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConsentEvent' }
+    post:
+      summary: Record a consent event (FR-031)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsentEventInput' }
+      responses:
+        '201':
+          description: Recorded
+          content: { application/json: { schema: { $ref: '#/components/schemas/ConsentEvent' } } }
+
+  /customers/{customer_id}/messages:
+    parameters:
+      - { name: customer_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+      - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+      - { name: template_code, in: query, schema: { type: string } }
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+    get:
+      summary: Message timeline for a customer (FR-028)
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: object
+                allOf: [{ $ref: '#/components/schemas/Page' }]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+    post:
+      summary: Send a one-off message (FR-024..030)
+      description: |
+        Synchronously validates consent (R7) and queues the message via the
+        outbox (R8). Idempotent on `client_request_id` (R10). Returns the
+        persisted `Message` row with `status='queued'`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageSendInput' }
+      responses:
+        '201':
+          description: Queued
+          content: { application/json: { schema: { $ref: '#/components/schemas/Message' } } }
+        '200':
+          description: Already-queued (idempotent replay)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Message' } } }
+        '403':
+          description: Consent required
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { description: Validation failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /customer-messages/{message_id}/retry:
+    parameters:
+      - { name: message_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    post:
+      summary: Retry a failed message (FR-033)
+      responses:
+        '202': { description: Re-queued }
+        '409': { description: Not in a retryable state }
+
+  /customer-messages/callbacks/{provider}:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Asynchronous status callback from messaging provider (FR-029, R8)
+      description: |
+        Authenticated by HMAC over the raw request body using the per-provider
+        shared secret in the `X-POS-Signature` header. The handler appends one
+        or more `MessageStatusEvent` rows.
+      security: []
+      parameters:
+        - { name: X-POS-Signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '204': { description: Accepted }
+        '401': { description: Bad signature }
+
+  /message-templates:
+    get:
+      summary: List templates (Marketing/Admin)
+      parameters:
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: purpose, in: query, schema: { $ref: '#/components/schemas/Purpose' } }
+        - { name: enabled, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MessageTemplate' }
+    post:
+      summary: Create template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageTemplateInput' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/MessageTemplate' } } }
+  /message-templates/{template_id}:
+    parameters:
+      - { name: template_id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    put:
+      summary: Update template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageTemplateInput' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/MessageTemplate' } } }
+    delete:
+      summary: Disable template (soft-disable; never hard-delete)
+      responses:
+        '204': { description: Disabled }
