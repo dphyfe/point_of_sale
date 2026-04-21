@@ -81,7 +81,9 @@ export function CustomerSearchPage() {
                         <tbody>
                             {data.items.map((c) => (
                                 <tr key={c.id}>
-                                    <td>{c.display_name}</td>
+                                    <td>
+                                        <a href={`#/customers/${c.id}`}>{c.display_name}</a>
+                                    </td>
                                     <td>{c.contact_type}</td>
                                     <td>{c.email ?? ''}</td>
                                     <td>{c.primary_phone ?? ''}</td>

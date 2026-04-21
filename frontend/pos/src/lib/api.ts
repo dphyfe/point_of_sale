@@ -4,7 +4,7 @@ const BASE = (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API
 
 export type ApiError = { status: number; code: string; message: string; details?: unknown };
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     const token = getToken();
     if (token) {
@@ -18,6 +18,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
         headers["x-dev-user"] = getDevUserId();
         headers["x-dev-roles"] = getDevRoles().join(",");
     }
+    if (extraHeaders) Object.assign(headers, extraHeaders);
 
     const r = await fetch(`${BASE}${path}`, {
         method,
@@ -40,6 +41,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
     get: <T>(p: string) => request<T>("GET", p),
     post: <T>(p: string, b?: unknown) => request<T>("POST", p, b),
-    put: <T>(p: string, b?: unknown) => request<T>("PUT", p, b),
+    put: <T>(p: string, b?: unknown, headers?: Record<string, string>) => request<T>("PUT", p, b, headers),
     del: <T>(p: string) => request<T>("DELETE", p),
 };

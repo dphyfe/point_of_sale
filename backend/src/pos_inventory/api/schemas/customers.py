@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -46,7 +47,15 @@ class CustomerRead(CustomerBase):
     id: UUID
     state: CustomerState
     version: int
+    display_name: str = ""
     merged_into: UUID | None = None
+    tax_id_masked: str | None = None
+    date_of_birth: date | None = None
+    last_purchase_at: datetime | None = None
+    last_store_visited: str | None = None
+    lifetime_spend: Decimal = Decimal("0")
+    visit_count: int = 0
+    average_order_value: Decimal = Decimal("0")
     created_at: datetime
     updated_at: datetime
 

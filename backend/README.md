@@ -70,6 +70,20 @@ under ~30 s. The seed bypasses the per-request `create_po()` service for speed,
 so seeded POs do not emit `purchase_order.created` outbox events. Reseeding
 without `--reset` tops up to the requested count without inserting duplicates.
 
+### Customer-view seed (002)
+
+```pwsh
+# Bring tenant up to 50,000 customers (top-up only):
+python -m pos_inventory.scripts.seed_customers --confirm --customer-count 50000
+
+# Add 1,000 more with default consent matrix written:
+python -m pos_inventory.scripts.seed_customers --confirm --customer-add 1000 --with-consent-defaults
+```
+
+Each insert uses a fresh `client_request_id` so re-runs are safe. The script
+also attaches up to 200 unlinked `ret.customer_return` rows per run to random
+new customers so the History tab has visible data.
+
 ## Background workers
 
 ```pwsh
