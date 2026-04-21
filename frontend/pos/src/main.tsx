@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import App from "./app/App";
 import { startOnlineHeartbeat } from "./lib/offline-queue";
+import "./app/theme.css";
 
 const qc = new QueryClient();
 startOnlineHeartbeat();
