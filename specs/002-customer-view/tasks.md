@@ -81,7 +81,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T029 [P] [US2] Read-side repository `backend/src/pos_inventory/persistence/repositories/customer_history_repo.py` with `list_history(customer_id, filters, page, page_size, scope)` — `UNION ALL` over `ret.customer_return`, `ret.exchange`, sales-table-when-present, joined to `inv.location` and `inv.site` for store/register names, ordered `occurred_at DESC` (FR-016/-017)
+- [X] T029 [P] [US2] Read-side repository `backend/src/pos_inventory/persistence/repositories/customer_history_repo.py` with `list_history(customer_id, filters, page, page_size, scope)` — `UNION ALL` over `ret.customer_return`, `ret.exchange`, sales-table-when-present, joined to `inv.location` and `inv.site` for store/register names, ordered `occurred_at DESC` (FR-016/-017)
 - [X] T030 [P] [US2] `get_transaction_detail(customer_id, kind, transaction_id, scope)` in the same repo — returns the row plus its line items joined to `inv.sku`, serial numbers from `inv.serial`, and any `related_po_id`/`related_rma_id` (FR-018)
 - [X] T031 [P] [US2] `get_summary_metrics(customer_id)` in the same repo — `lifetime_spend`, `visit_count`, `average_order_value`, `last_purchase_at`, `last_store_visited`; consumed by US1's `Customer` projection too (FR-022)
 - [X] T032 [US2] Service `backend/src/pos_inventory/domain/customer_history/service.py` composing the three repo functions and applying the visibility-scope filter from T018
@@ -136,22 +136,22 @@
 
 ### Implementation for User Story 4
 
-- [ ] T057 [P] [US4] Template rendering helper `backend/src/pos_inventory/domain/messaging/render.py` — supports the allow-listed merge fields from data-model.md (`customer.*`, `transaction.*`, `pickup.*`, `business.*`), HTML-escapes for email and plain-escapes for SMS, accepts `merge_overrides`
-- [ ] T058 [P] [US4] Consent-gate function `backend/src/pos_inventory/domain/consent/gate.py` reading `consent.state` for `(customer_id, channel, purpose)` and applying the FR-030 default rule (R7); raises `consent_required` (403)
-- [ ] T059 [US4] Service `backend/src/pos_inventory/domain/messaging/service.py` — `send_message()` runs in one transaction: validate input → load template (or accept free-text) → resolve `purpose` → call T058 → render via T057 → insert `msg.message` (status=`queued`) → insert `msg.outbox` row (event_kind=`customer_message.send`) → return the message; idempotent on `client_request_id` (R10)
-- [ ] T060 [US4] Service `retry_message(message_id, performed_by)` — only allowed when status ∈ {`failed`,`bounced`}; inserts a new `msg.outbox` row of kind `customer_message.retry` and appends a `retrying` `msg.message_status_event`
-- [ ] T061 [US4] Provider adapter port `backend/src/pos_inventory/domain/messaging/provider.py` — abstract `MessagingProvider.send(channel, to, subject, body) -> ProviderSendResult` plus a `NullProvider` default that pretends success but is gated by an env var so dev mode doesn't actually send
-- [ ] T062 [US4] HMAC verification helper `backend/src/pos_inventory/domain/messaging/callbacks.py` (`verify(body_bytes, signature_header, shared_secret)`) and a `parse(provider, payload)` function that maps provider-specific shapes to `MessageStatusEvent` rows
-- [ ] T063 [US4] Outbox dispatcher extension in `backend/src/pos_inventory/workers/outbox_worker.py` (or a new `messaging_worker.py`) — handles `customer_message.send` and `customer_message.retry` event kinds: calls the provider, on success appends a `sent` `msg.message_status_event` and updates `msg.message.status`/`provider`/`provider_message_id`; on failure appends a `failed` event and increments `attempts`
-- [ ] T064 [US4] API router `backend/src/pos_inventory/api/v1/customer_messages.py` implementing `POST /v1/customers/{id}/messages`, `GET /v1/customers/{id}/messages`, and `POST /v1/customer-messages/{message_id}/retry`
-- [ ] T065 [US4] Callback API endpoint `POST /v1/customer-messages/callbacks/{provider}` in the same router — `security: []` in OpenAPI, validates `X-POS-Signature` via T062, appends one or more `msg.message_status_event` rows; returns 401 on bad signature
-- [ ] T066 [P] [US4] Unit test `backend/tests/unit/domain/messaging/test_template_render.py` — known merge fields render, unknown fields raise, HTML email escapes `<script>`, SMS render does not introduce HTML entities
-- [ ] T067 [P] [US4] Unit test `backend/tests/unit/domain/consent/test_consent_enforcement.py` — marketing send blocked when state is `unset` or `opted_out`; transactional send allowed when state is `unset`; transactional send blocked when explicitly `opted_out`
-- [ ] T068 [P] [US4] Unit test `backend/tests/unit/domain/messaging/test_outbox_dispatch.py` — successful send appends `sent` event and sets `provider_message_id`; provider exception appends `failed` event and increments `attempts`; idempotent replay on `client_request_id` returns the same `msg.message`
-- [ ] T069 [P] [US4] Unit test `backend/tests/unit/domain/messaging/test_provider_callbacks.py` — bad HMAC → 401; good HMAC with `delivered` payload appends a `delivered` event and updates `msg.message.status`
-- [ ] T070 [P] [US4] Unit test `backend/tests/unit/api/test_messaging_rbac.py` — only `Cashier`, `Customer Service`, `Manager`, `Admin` roles can `POST /messages`; only `Manager`, `Admin` can retry (FR-033)
-- [ ] T071 [P] [US4] Frontend `frontend/pos/src/features/customers/MessagesTab.tsx` — compose with template picker + free-text mode, SMS character/segment counter (FR-026), preview, send, timeline filtered by channel/template (FR-028), retry button on failed rows
-- [ ] T072 [P] [US4] Replace the US2 TODO from T036: implement the "Email receipt" affordance in `HistoryTab.tsx` to call `POST /v1/customers/{id}/messages` with `template_code=receipt_copy` and `related_transaction_id`/`related_transaction_kind`
+- [X] T057 [P] [US4] Template rendering helper `backend/src/pos_inventory/domain/messaging/render.py` — supports the allow-listed merge fields from data-model.md (`customer.*`, `transaction.*`, `pickup.*`, `business.*`), HTML-escapes for email and plain-escapes for SMS, accepts `merge_overrides`
+- [X] T058 [P] [US4] Consent-gate function `backend/src/pos_inventory/domain/consent/gate.py` reading `consent.state` for `(customer_id, channel, purpose)` and applying the FR-030 default rule (R7); raises `consent_required` (403)
+- [X] T059 [US4] Service `backend/src/pos_inventory/domain/messaging/service.py` — `send_message()` runs in one transaction: validate input → load template (or accept free-text) → resolve `purpose` → call T058 → render via T057 → insert `msg.message` (status=`queued`) → insert `msg.outbox` row (event_kind=`customer_message.send`) → return the message; idempotent on `client_request_id` (R10)
+- [X] T060 [US4] Service `retry_message(message_id, performed_by)` — only allowed when status ∈ {`failed`,`bounced`}; inserts a new `msg.outbox` row of kind `customer_message.retry` and appends a `retrying` `msg.message_status_event`
+- [X] T061 [US4] Provider adapter port `backend/src/pos_inventory/domain/messaging/provider.py` — abstract `MessagingProvider.send(channel, to, subject, body) -> ProviderSendResult` plus a `NullProvider` default that pretends success but is gated by an env var so dev mode doesn't actually send
+- [X] T062 [US4] HMAC verification helper `backend/src/pos_inventory/domain/messaging/callbacks.py` (`verify(body_bytes, signature_header, shared_secret)`) and a `parse(provider, payload)` function that maps provider-specific shapes to `MessageStatusEvent` rows
+- [X] T063 [US4] Outbox dispatcher extension in `backend/src/pos_inventory/workers/outbox_worker.py` (or a new `messaging_worker.py`) — handles `customer_message.send` and `customer_message.retry` event kinds: calls the provider, on success appends a `sent` `msg.message_status_event` and updates `msg.message.status`/`provider`/`provider_message_id`; on failure appends a `failed` event and increments `attempts`
+- [X] T064 [US4] API router `backend/src/pos_inventory/api/v1/customer_messages.py` implementing `POST /v1/customers/{id}/messages`, `GET /v1/customers/{id}/messages`, and `POST /v1/customer-messages/{message_id}/retry`
+- [X] T065 [US4] Callback API endpoint `POST /v1/customer-messages/callbacks/{provider}` in the same router — `security: []` in OpenAPI, validates `X-POS-Signature` via T062, appends one or more `msg.message_status_event` rows; returns 401 on bad signature
+- [X] T066 [P] [US4] Unit test `backend/tests/unit/domain/messaging/test_template_render.py` — known merge fields render, unknown fields raise, HTML email escapes `<script>`, SMS render does not introduce HTML entities
+- [X] T067 [P] [US4] Unit test `backend/tests/unit/domain/consent/test_consent_enforcement.py` — marketing send blocked when state is `unset` or `opted_out`; transactional send allowed when state is `unset`; transactional send blocked when explicitly `opted_out`
+- [X] T068 [P] [US4] Unit test `backend/tests/unit/domain/messaging/test_outbox_dispatch.py` — successful send appends `sent` event and sets `provider_message_id`; provider exception appends `failed` event and increments `attempts`; idempotent replay on `client_request_id` returns the same `msg.message`
+- [X] T069 [P] [US4] Unit test `backend/tests/unit/domain/messaging/test_provider_callbacks.py` — bad HMAC → 401; good HMAC with `delivered` payload appends a `delivered` event and updates `msg.message.status`
+- [X] T070 [P] [US4] Unit test `backend/tests/unit/api/test_messaging_rbac.py` — only `Cashier`, `Customer Service`, `Manager`, `Admin` roles can `POST /messages`; only `Manager`, `Admin` can retry (FR-033)
+- [X] T071 [P] [US4] Frontend `frontend/pos/src/features/customers/MessagesTab.tsx` — compose with template picker + free-text mode, SMS character/segment counter (FR-026), preview, send, timeline filtered by channel/template (FR-028), retry button on failed rows
+- [X] T072 [P] [US4] Replace the US2 TODO from T036: implement the "Email receipt" affordance in `HistoryTab.tsx` to call `POST /v1/customers/{id}/messages` with `template_code=receipt_copy` and `related_transaction_id`/`related_transaction_kind`
 
 **Checkpoint**: US4 functional independently — staff can send messages and see status updates.
 
@@ -165,13 +165,13 @@
 
 ### Implementation for User Story 5
 
-- [ ] T073 [P] [US5] Service `backend/src/pos_inventory/domain/messaging/template_service.py` — `create_template`, `update_template`, `disable_template` (soft-disable: sets `enabled=false`, never hard-deletes); validates that referenced merge-field tokens are within the allow-list defined in data-model.md; uniqueness check on `(tenant_id, code)`
-- [ ] T074 [P] [US5] API router `backend/src/pos_inventory/api/v1/message_templates.py` — `GET /v1/message-templates`, `POST /v1/message-templates`, `PUT /v1/message-templates/{id}`, `DELETE /v1/message-templates/{id}`; restricted to `Marketing` and `Admin` roles
-- [ ] T075 [US5] Service `backend/src/pos_inventory/domain/consent/service.py` — `record_event(customer_id, channel, purpose, event_kind, source, actor_user_id, note)` writes one `consent.event` and upserts the `consent.state` row in the same transaction; `get_matrix_and_history(customer_id)` returns the structure required by `GET /v1/customers/{id}/consent`
-- [ ] T076 [US5] Provider-unsubscribe path: when T065's callback parser detects an `unsubscribe` event, it calls T075 with `source='provider_unsubscribe'`, `actor_user_id=NULL`, `event_kind='opted_out'` and appends an audit entry (FR-032)
-- [ ] T077 [US5] API router `backend/src/pos_inventory/api/v1/customer_consent.py` — `GET /v1/customers/{id}/consent`, `POST /v1/customers/{id}/consent`
-- [ ] T078 [P] [US5] Frontend `frontend/pos/src/features/customers/ConsentTab.tsx` — current matrix, per-channel/per-purpose toggle that records an event with `source='pos'`, history list
-- [ ] T079 [P] [US5] Frontend `frontend/pos/src/features/customers/TemplatesAdmin.tsx` (admin-only route) — list, create, edit, soft-disable; warns when an inline merge field is not in the allow-list
+- [X] T073 [P] [US5] Service `backend/src/pos_inventory/domain/messaging/template_service.py` — `create_template`, `update_template`, `disable_template` (soft-disable: sets `enabled=false`, never hard-deletes); validates that referenced merge-field tokens are within the allow-list defined in data-model.md; uniqueness check on `(tenant_id, code)`
+- [X] T074 [P] [US5] API router `backend/src/pos_inventory/api/v1/message_templates.py` — `GET /v1/message-templates`, `POST /v1/message-templates`, `PUT /v1/message-templates/{id}`, `DELETE /v1/message-templates/{id}`; restricted to `Marketing` and `Admin` roles
+- [X] T075 [US5] Service `backend/src/pos_inventory/domain/consent/service.py` — `record_event(customer_id, channel, purpose, event_kind, source, actor_user_id, note)` writes one `consent.event` and upserts the `consent.state` row in the same transaction; `get_matrix_and_history(customer_id)` returns the structure required by `GET /v1/customers/{id}/consent`
+- [X] T076 [US5] Provider-unsubscribe path: when T065's callback parser detects an `unsubscribe` event, it calls T075 with `source='provider_unsubscribe'`, `actor_user_id=NULL`, `event_kind='opted_out'` and appends an audit entry (FR-032)
+- [X] T077 [US5] API router `backend/src/pos_inventory/api/v1/customer_consent.py` — `GET /v1/customers/{id}/consent`, `POST /v1/customers/{id}/consent`
+- [X] T078 [P] [US5] Frontend `frontend/pos/src/features/customers/ConsentTab.tsx` — current matrix, per-channel/per-purpose toggle that records an event with `source='pos'`, history list
+- [X] T079 [P] [US5] Frontend `frontend/pos/src/features/customers/TemplatesAdmin.tsx` (admin-only route) — list, create, edit, soft-disable; warns when an inline merge field is not in the allow-list
 
 **Checkpoint**: All user stories functional. Feature is ready for polish.
 
@@ -179,12 +179,12 @@
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T080 [P] Performance smoke: write `specs/002-customer-view/performance-smoke.md` describing the seed sizing (50k customers, ≥1k transactions on a chosen customer) and the SC-001/SC-009 measurement protocol; add the EXPLAIN ANALYZE expectations for the GIN/btree indexes from R3
-- [ ] T081 [P] Quickstart validation: write `specs/002-customer-view/quickstart-validation.md` mapping each numbered step in `quickstart.md` to a curl/HTTPie sequence and the assertion (status, key body fields)
-- [ ] T082 [P] Add an `openapi.yaml` lint check to `backend/scripts/check_openapi.py` so the new contract file is validated alongside the inventory contract on CI
-- [ ] T083 [P] Frontend wiring: register the new customers route in `frontend/pos/src/app/App.tsx` and the navigation entry in `frontend/pos/src/app/layout.tsx`
-- [ ] T084 Run `backend/scripts/check_openapi.py` and resolve any drift between `contracts/openapi.yaml` and the implemented FastAPI routes
-- [ ] T085 Run quickstart end-to-end against a fresh `Local App` launch and capture results in the validation doc from T081
+- [X] T080 [P] Performance smoke: write `specs/002-customer-view/performance-smoke.md` describing the seed sizing (50k customers, ≥1k transactions on a chosen customer) and the SC-001/SC-009 measurement protocol; add the EXPLAIN ANALYZE expectations for the GIN/btree indexes from R3
+- [X] T081 [P] Quickstart validation: write `specs/002-customer-view/quickstart-validation.md` mapping each numbered step in `quickstart.md` to a curl/HTTPie sequence and the assertion (status, key body fields)
+- [X] T082 [P] Add an `openapi.yaml` lint check to `backend/scripts/check_openapi.py` so the new contract file is validated alongside the inventory contract on CI
+- [X] T083 [P] Frontend wiring: register the new customers route in `frontend/pos/src/app/App.tsx` and the navigation entry in `frontend/pos/src/app/layout.tsx`
+- [X] T084 Run `backend/scripts/check_openapi.py` and resolve any drift between `contracts/openapi.yaml` and the implemented FastAPI routes
+- [X] T085 Run quickstart end-to-end against a fresh `Local App` launch and capture results in the validation doc from T081
 
 ---
 

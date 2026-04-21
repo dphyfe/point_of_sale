@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { AuditTab } from './AuditTab';
+import { ConsentTab } from './ConsentTab';
 import { HistoryTab } from './HistoryTab';
+import { MessagesTab } from './MessagesTab';
 
 interface CustomerProfile {
     id: string;
@@ -61,8 +63,10 @@ export function CustomerProfilePage({ customerId }: { customerId: string }) {
             </nav>
             {tab === 'overview' && <OverviewTab profile={profile} onSaved={(p) => setProfile(p)} />}
             {tab === 'history' && <HistoryTab customerId={customerId} />}
-            {tab === 'messages' && <p>Messaging UI — see US4.</p>}
-            {tab === 'consent' && <p>Consent UI — see US5.</p>}
+            {tab === 'messages' && (
+                <MessagesTab customerId={customerId} defaultEmail={profile.email ?? undefined} />
+            )}
+            {tab === 'consent' && <ConsentTab customerId={customerId} />}
             {tab === 'audit' && <AuditTab customerId={customerId} />}
         </article>
     );

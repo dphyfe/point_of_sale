@@ -8,6 +8,8 @@ const NAV: { to: string; label: string }[] = [
     { to: "/returns", label: "Returns" },
     { to: "/counts", label: "Counts" },
     { to: "/transfers", label: "Transfers" },
+    { to: "/customers", label: "Customers" },
+    { to: "/admin/templates", label: "Templates" },
 ];
 
 export default function Layout({ children }: PropsWithChildren) {

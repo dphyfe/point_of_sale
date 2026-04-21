@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import Layout from "./layout";
 import { PoListPage } from "../features/purchase-orders/PoListPage";
 import { PoDetailPage } from "../features/purchase-orders/PoDetailPage";
@@ -16,6 +17,9 @@ import { TransferListPage } from "../features/transfers/TransferListPage";
 import { TransferCreatePage } from "../features/transfers/TransferCreatePage";
 import { TransferShipPage } from "../features/transfers/TransferShipPage";
 import { TransferReceivePage } from "../features/transfers/TransferReceivePage";
+import { CustomerSearchPage } from "../features/customers/CustomerSearchPage";
+import { CustomerProfilePage } from "../features/customers/CustomerProfilePage";
+import { TemplatesAdmin } from "../features/customers/TemplatesAdmin";
 
 export default function App() {
     return (
@@ -38,7 +42,16 @@ export default function App() {
                 <Route path="/transfers/new" element={<TransferCreatePage />} />
                 <Route path="/transfers/:id/ship" element={<TransferShipPage />} />
                 <Route path="/transfers/:id/receive" element={<TransferReceivePage />} />
+                <Route path="/customers" element={<CustomerSearchPage />} />
+                <Route path="/customers/:id" element={<CustomerProfileRoute />} />
+                <Route path="/admin/templates" element={<TemplatesAdmin />} />
             </Routes>
         </Layout>
     );
+}
+
+function CustomerProfileRoute() {
+    const { id } = useParams<{ id: string }>();
+    if (!id) return <p>Missing customer id</p>;
+    return <CustomerProfilePage customerId={id} />;
 }

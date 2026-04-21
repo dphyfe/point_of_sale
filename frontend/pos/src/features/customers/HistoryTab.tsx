@@ -75,6 +75,23 @@ export function HistoryTab({ customerId }: { customerId: string }) {
         }
     };
 
+    const emailReceipt = async (txnId: string, kind: string) => {
+        try {
+            await api.post(`/customers/${customerId}/messages`, {
+                template_code: 'receipt_copy',
+                channel: 'email',
+                purpose: 'transactional',
+                to_address: '',
+                related_transaction_id: txnId,
+                related_transaction_kind: kind,
+                client_request_id: crypto.randomUUID(),
+            });
+            alert('Receipt emailed.');
+        } catch (e) {
+            alert(`Email failed: ${(e as Error).message}`);
+        }
+    };
+
     return (
         <section>
             <h3>Transaction History</h3>
@@ -110,6 +127,9 @@ export function HistoryTab({ customerId }: { customerId: string }) {
                                 <td>
                                     <button onClick={() => openDetail(it.kind, it.id)}>View</button>
                                     <button onClick={() => reprintReceipt(it.id)}>Reprint</button>
+                                    <button onClick={() => emailReceipt(it.id, it.kind)}>
+                                        Email receipt
+                                    </button>
                                     {it.kind === 'sale' && (
                                         <a href={`#/returns/new?from=${it.id}`}>Start return</a>
                                     )}
