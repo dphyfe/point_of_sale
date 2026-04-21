@@ -1,7 +1,7 @@
 """audit + outbox
 
 Revision ID: 0004_audit_outbox
-Revises: 0003_inventory_ledger_balance_costlayer
+Revises: 0003_inventory_ledger
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision: str = "0004_audit_outbox"
-down_revision: str | None = "0003_inventory_ledger_balance_costlayer"
+down_revision: str | None = "0003_inventory_ledger"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,6 +1,6 @@
 """inventory ledger, balance, cost layer, serial, lot, adjustment
 
-Revision ID: 0003_inventory_ledger_balance_costlayer
+Revision ID: 0003_inventory_ledger
 Revises: 0002_locations_and_skus
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision: str = "0003_inventory_ledger_balance_costlayer"
+revision: str = "0003_inventory_ledger"
 down_revision: str | None = "0002_locations_and_skus"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

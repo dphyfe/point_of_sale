@@ -52,13 +52,23 @@ python -m pos_inventory.scripts.seed_dev --confirm --reset
 $env:POS_INVENTORY_ALLOW_SEED = "true"
 python -m pos_inventory.scripts.seed_dev --confirm `
     --tenant-id 00000000-0000-0000-0000-000000000001 `
-    --sku-count 500
+    --sku-count 500 `
+    --vendor-count 25 `
+    --po-count 2000
 ```
 
 Creates 1 site (`STORE-01`), 3 locations (`BACKROOM`, `FRONT`, `IN-TRANSIT`),
-and `--sku-count` SKUs (default 500) with realistic merchandising fields
-(`upc`, `department`, `brand`, `price`) and stocked `BACKROOM` balances posted
-through the real ledger writer.
+`--sku-count` SKUs (default 500) with realistic merchandising fields (`upc`,
+`department`, `brand`, `price`) and stocked `BACKROOM` balances posted through
+the real ledger writer, plus `--vendor-count` vendors (default 25) and
+`--po-count` purchase orders (default 2000) with a realistic state distribution
+(draft / submitted / approved / sent / receiving / closed / cancelled),
+sequenced `PO-NNNNNN` numbers, and consistent lifecycle timestamps.
+
+POs are bulk-inserted (chunked `executemany`); 10k POs typically completes in
+under ~30 s. The seed bypasses the per-request `create_po()` service for speed,
+so seeded POs do not emit `purchase_order.created` outbox events. Reseeding
+without `--reset` tops up to the requested count without inserting duplicates.
 
 ## Background workers
 
