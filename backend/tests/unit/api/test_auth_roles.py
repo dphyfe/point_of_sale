@@ -22,6 +22,9 @@ def test_canonical_role_set_matches_spec():
         "Store Manager",
         "Purchasing",
         "Admin",
+        # Added by feature 002 (customer view): FR-036 extension.
+        "Customer Service",
+        "Marketing",
     }
 
 

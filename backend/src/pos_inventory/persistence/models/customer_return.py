@@ -24,3 +24,7 @@ class CustomerReturn(Base):
     manager_approval_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     refund_method: Mapped[str] = mapped_column(String(32), nullable=False, default="original")
     refund_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    # Added in 0015_link_customer_to_sales (nullable so guest returns remain valid).
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cust.customer.id"), nullable=True
+    )

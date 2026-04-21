@@ -45,4 +45,16 @@ from pos_inventory.persistence.models.transfer_serial import TransferSerial  # n
 # Polish (Phase 8)
 from pos_inventory.persistence.models.config import TenantConfig  # noqa: F401
 
+# Customer view (002)
+from pos_inventory.persistence.models.customer import Customer  # noqa: F401
+from pos_inventory.persistence.models.customer_address import CustomerAddress  # noqa: F401
+from pos_inventory.persistence.models.customer_change import CustomerProfileChange  # noqa: F401
+from pos_inventory.persistence.models.customer_merge import CustomerMerge  # noqa: F401
+from pos_inventory.persistence.models.consent_event import ConsentEvent  # noqa: F401
+from pos_inventory.persistence.models.consent_state import ConsentState  # noqa: F401
+from pos_inventory.persistence.models.message_template import MessageTemplate  # noqa: F401
+from pos_inventory.persistence.models.customer_message import CustomerMessage  # noqa: F401
+from pos_inventory.persistence.models.message_status_event import MessageStatusEvent  # noqa: F401
+from pos_inventory.persistence.models.msg_outbox import MsgOutbox  # noqa: F401
+
 __all__ = ["Base", "metadata"]

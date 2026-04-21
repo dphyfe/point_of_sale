@@ -33,6 +33,12 @@ def _register_routers(app: FastAPI) -> None:
         locations,
         transfers,
         config,
+        customers,
+        customer_addresses,
+        customer_history,
+        customer_messages,
+        message_templates,
+        customer_consent,
     )
 
     for mod in (
@@ -47,6 +53,12 @@ def _register_routers(app: FastAPI) -> None:
         locations,
         transfers,
         config,
+        customers,
+        customer_addresses,
+        customer_history,
+        customer_messages,
+        message_templates,
+        customer_consent,
     ):
         app.include_router(mod.router, prefix="/v1")
 

@@ -1,7 +1,8 @@
 """JWT verification + role gating.
 
-Canonical roles per FR-036: Cashier, Receiver, Inventory Clerk, Store Manager,
-Purchasing, Admin.
+Canonical roles per FR-036 (001) + 002 customer-view extension:
+Cashier, Receiver, Inventory Clerk, Store Manager, Purchasing, Admin,
+Customer Service, Marketing.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ CANONICAL_ROLES = {
     "Store Manager",
     "Purchasing",
     "Admin",
+    "Customer Service",
+    "Marketing",
 }
 
 _bearer = HTTPBearer(auto_error=False)

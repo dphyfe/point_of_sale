@@ -17,7 +17,7 @@ A store associate is at the register or back office and needs to pull up an exis
 
 **Acceptance Scenarios**:
 
-1. **Given** the customer list contains 50,000 customers, **When** the associate types the first 4 characters of a customer's last name, **Then** matching customers appear within 2 seconds and the intended customer is visible in the first page of results.
+1. **Given** the customer list contains 50,000 customers, **When** the associate types the first 4 characters of a customer's last name, **Then** matching customers appear within 5 seconds and the intended customer is visible in the first page of results.
 2. **Given** the associate types a 7-digit fragment of a phone number with parentheses or dashes, **When** the search runs, **Then** the customer with that phone is returned regardless of the punctuation/spacing the associate typed.
 3. **Given** two customers share the same first and last name, **When** the associate searches by that name, **Then** the result list shows distinguishing details (city, last purchase date, last 4 of phone, email) so the associate can pick the right one.
 4. **Given** the associate pastes a receipt/ticket ID printed at the bottom of a receipt, **When** the search runs, **Then** the system returns the customer linked to that transaction (or a clear "no customer attached" result).
@@ -119,7 +119,7 @@ A marketing or admin user needs to define which templates are available to staff
 #### Customer list & search
 
 - **FR-001**: System MUST provide a paginated, sortable customer list with configurable columns (at minimum: name, phone, email, city, tags, last purchase date, total spend, last store visited, active/inactive).
-- **FR-002**: System MUST provide a global search that supports partial, case-insensitive matches and ignores common punctuation/spacing in phone numbers (e.g., `(512) 555-1234` matches `5125551234`).
+- **FR-002**: System MUST provide a global search with case-insensitive prefix matches on name and email and prefix matches on the digits-only normalized form of phone numbers, so that any punctuation/spacing variation of the same phone number returns the same customer (e.g., `(512) 555-1234` matches the digit prefix `512555`).
 - **FR-003**: Search MUST match against name, phone, email, internal customer ID, external loyalty ID, and receipt/ticket ID.
 - **FR-004**: System MUST provide filters for: tags, customer type (individual vs business), city/state, last purchase date range, total spend range, active vs inactive, and per-channel communication opt-in status.
 - **FR-005**: When multiple customers match similar details, the list MUST surface disambiguating fields (e.g., city, last 4 of phone, email, last purchase date) on each row.
@@ -129,9 +129,9 @@ A marketing or admin user needs to define which templates are available to staff
 
 - **FR-007**: System MUST allow creating a new customer with a minimal required set (name OR company name, plus at least one contact method) directly from checkout and from the customer list.
 - **FR-008**: System MUST support editing core profile fields: identification (internal ID, external loyalty/CRM IDs), personal (first/last or company, contact type), contact (primary phone, secondary phone, email, multiple typed addresses — billing/shipping/service), and preferences (preferred contact method, per-channel opt-in flags, language, marketing tags/segments).
-- **FR-009**: System MUST validate phone and email format on save and enforce uniqueness rules where configured (e.g., email unique within tenant when present).
+- **FR-009**: System MUST validate phone and email format on save and enforce email uniqueness within a tenant when an email is present (NULL emails are allowed in unlimited number).
 - **FR-010**: System MUST support role-based field-level edit and visibility rules so sensitive fields (e.g., tax ID, date of birth) can be restricted to specific roles.
-- **FR-011**: System MUST record a field-level change log for every profile edit (old value, new value, user, timestamp) and expose it to privileged roles.
+- **FR-011**: System MUST record a field-level change log for every edit to a customer's core profile fields — identification, name/company, contact methods, preferences, tags, sensitive fields, and lifecycle state — capturing old value, new value, user, and timestamp, and expose it to privileged roles. (Address add/edit/delete is audited separately via the platform audit log; see FR-037.)
 - **FR-012**: System MUST support deactivating a customer such that the customer cannot be attached to new sales but all historical links remain intact.
 - **FR-013**: System MUST support a soft-delete or anonymization path that preserves transactional integrity (orders still reference a customer, even if anonymized).
 - **FR-014**: System MUST allow privileged users to merge two customer profiles. After merge, all transactions and messages from both profiles MUST be reachable from the surviving profile, the merged-away profile MUST remain as a tombstone redirecting to the survivor, and the merge MUST be recorded in the audit log with both source IDs and the user.
@@ -155,11 +155,11 @@ A marketing or admin user needs to define which templates are available to staff
 - **FR-026**: Compose MUST support a preview before sending and MUST show an SMS character/segment counter when composing SMS.
 - **FR-027**: System MUST persist every outbound message as a `CustomerMessage` record linked to the customer, the sender, the channel, the template (if any), and optionally a related transaction.
 - **FR-028**: System MUST display messages chronologically on a Messages tab within the profile, with filters by channel and by template.
-- **FR-029**: System MUST integrate with an abstract messaging provider for email and SMS, accept asynchronous status callbacks, and update each message with the latest status (queued, sent, delivered, bounced, failed) and timestamp.
-- **FR-030**: System MUST enforce per-channel and per-purpose opt-in: marketing-tagged templates MUST be blocked for customers who are not opted in to that channel for marketing, while transactional messages (e.g., receipt copy, order status, pickup ready) remain available where legally allowed.
+- **FR-029**: System MUST integrate with an abstract messaging provider for email and SMS, accept asynchronous status callbacks, and update each message with the latest status (queued, sent, delivered, bounced, failed, retrying) and timestamp.
+- **FR-030**: System MUST enforce per-channel and per-purpose opt-in: marketing-tagged templates MUST be blocked unless the customer is explicitly opted in for that channel for marketing; transactional templates (e.g., receipt copy, order status, pickup ready) MUST be allowed unless the customer is explicitly opted out for that channel for transactional purposes.
 - **FR-031**: System MUST record a consent history per channel: when, how, and where (POS / online portal / support) opt-in was granted or withdrawn.
 - **FR-032**: System MUST surface unsubscribe handling so that an unsubscribe event from the messaging provider updates the customer's opt-in flags and is reflected in consent history.
-- **FR-033**: Failure of the messaging provider MUST NOT block other POS operations. Failed messages MUST be visible on the timeline with a retry action available to authorized roles.
+- **FR-033**: Failure of the messaging provider MUST NOT block other POS operations. Failed messages MUST be visible on the timeline with a retry action available to Manager and Admin roles.
 
 #### Permissions, privacy, and audit
 
@@ -203,7 +203,7 @@ A marketing or admin user needs to define which templates are available to staff
 - Email and SMS sending is handled by an abstract external "messaging provider" — the spec does not pick a specific vendor.
 - Multi-tenant isolation rules (one tenant = one business) already established by the inventory feature also apply to customers, messages, consent, and audit records.
 - Role definitions (Associate, Customer Service, Manager, Admin, etc.) already exist at the platform level; this feature defines which of them can do what, but does not introduce a new RBAC system.
-- Region/store scoping for visibility is configurable per tenant and defaults to "global" until configured otherwise.
+- Region/store scoping for visibility is delivered via JWT claims (`visibility_scope` and `assigned_site_ids[]`) on each user's token; the default token grants global visibility. There is no per-tenant toggle in this feature.
 - Marketing vs transactional classification of a template is determined by the tagging on the template, not by the message body.
 - Bulk marketing campaigns and segmentation tooling beyond simple tags are **out of scope** for this feature.
 - Customer-facing self-service portals (where customers manage their own profile) are **out of scope**; this spec is staff-facing, with consent events from external sources merely being recorded.

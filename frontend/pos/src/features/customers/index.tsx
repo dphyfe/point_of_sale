@@ -1,0 +1,1 @@
+export { CustomerSearchPage } from './CustomerSearchPage';
