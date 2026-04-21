@@ -1,0 +1,453 @@
+openapi: 3.0.3
+info:
+  title: POS Inventory Management API
+  version: 1.0.0
+  description: |
+    HTTP contract for the POS Inventory subsystem. All endpoints require a
+    bearer JWT minted by the surrounding POS auth service. The token MUST
+    carry `tenant_id` and `roles[]` constrained to the canonical role set
+    (Cashier, Receiver, Inventory Clerk, Store Manager, Purchasing, Admin).
+servers:
+  - url: https://{host}/v1
+    variables:
+      host: { default: api.example.com }
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UUID: { type: string, format: uuid }
+    Money: { type: string, pattern: '^-?\d+(\.\d{1,4})?$' }
+    Quantity: { type: string, pattern: '^-?\d+(\.\d{1,3})?$' }
+    SerialPolicy: { type: string, enum: [non_serialized, serialized, lot_tracked] }
+    SerialState: { type: string, enum: [in_stock, reserved, sold, returned, scrapped, rma_pending, rma_closed] }
+    POState: { type: string, enum: [draft, submitted, approved, sent, receiving, closed, cancelled] }
+    TransferState: { type: string, enum: [draft, shipped, received, cancelled] }
+    RmaState: { type: string, enum: [open, shipped, closed] }
+    CountState: { type: string, enum: [open, counting, review, approved, cancelled] }
+    Disposition: { type: string, enum: [return_to_stock, open_box, damage, vendor_rma] }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+    Site:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        code: { type: string }
+        name: { type: string }
+    Location:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        site_id: { $ref: '#/components/schemas/UUID' }
+        code: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [front, backroom, warehouse, bin, virtual_in_transit] }
+        parent_location_id: { $ref: '#/components/schemas/UUID', nullable: true }
+    Sku:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        code: { type: string }
+        name: { type: string }
+        category: { type: string, nullable: true }
+        vendor_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        serial_policy: { $ref: '#/components/schemas/SerialPolicy' }
+    InventoryBalance:
+      type: object
+      properties:
+        sku_id: { $ref: '#/components/schemas/UUID' }
+        location_id: { $ref: '#/components/schemas/UUID' }
+        on_hand: { $ref: '#/components/schemas/Quantity' }
+        reserved: { $ref: '#/components/schemas/Quantity' }
+        available: { $ref: '#/components/schemas/Quantity' }
+    Serial:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        sku_id: { $ref: '#/components/schemas/UUID' }
+        serial_value: { type: string }
+        state: { $ref: '#/components/schemas/SerialState' }
+        current_location_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        unit_cost: { $ref: '#/components/schemas/Money' }
+    SerialHistoryEntry:
+      type: object
+      properties:
+        occurred_at: { type: string, format: date-time }
+        from_state: { $ref: '#/components/schemas/SerialState', nullable: true }
+        to_state: { $ref: '#/components/schemas/SerialState' }
+        location_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        source_kind: { type: string }
+        source_document_id: { $ref: '#/components/schemas/UUID' }
+    PurchaseOrderLineInput:
+      type: object
+      required: [sku_id, ordered_qty, unit_cost]
+      properties:
+        sku_id: { $ref: '#/components/schemas/UUID' }
+        ordered_qty: { $ref: '#/components/schemas/Quantity' }
+        unit_cost: { $ref: '#/components/schemas/Money' }
+        expected_date: { type: string, format: date, nullable: true }
+    PurchaseOrderInput:
+      type: object
+      required: [vendor_id, ship_to_location_id, lines]
+      properties:
+        vendor_id: { $ref: '#/components/schemas/UUID' }
+        ship_to_location_id: { $ref: '#/components/schemas/UUID' }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/PurchaseOrderLineInput' }
+        terms: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+    PurchaseOrder:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        number: { type: string }
+        vendor_id: { $ref: '#/components/schemas/UUID' }
+        ship_to_location_id: { $ref: '#/components/schemas/UUID' }
+        state: { $ref: '#/components/schemas/POState' }
+        terms: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { $ref: '#/components/schemas/UUID' }
+              sku_id: { $ref: '#/components/schemas/UUID' }
+              ordered_qty: { $ref: '#/components/schemas/Quantity' }
+              received_qty: { $ref: '#/components/schemas/Quantity' }
+              backordered_qty: { $ref: '#/components/schemas/Quantity' }
+              unit_cost: { $ref: '#/components/schemas/Money' }
+              expected_date: { type: string, format: date, nullable: true }
+    ReceiptLineInput:
+      type: object
+      required: [purchase_order_line_id, received_qty]
+      properties:
+        purchase_order_line_id: { $ref: '#/components/schemas/UUID' }
+        received_qty: { $ref: '#/components/schemas/Quantity' }
+        unit_cost: { $ref: '#/components/schemas/Money' }
+        serials:
+          type: array
+          description: Required for serialized SKUs; length must equal received_qty.
+          items: { type: string }
+        lot_code: { type: string, nullable: true }
+        expiry_date: { type: string, format: date, nullable: true }
+    ReceiptInput:
+      type: object
+      required: [purchase_order_id, receiving_location_id, lines]
+      properties:
+        purchase_order_id: { $ref: '#/components/schemas/UUID' }
+        receiving_location_id: { $ref: '#/components/schemas/UUID' }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/ReceiptLineInput' }
+    Receipt:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        purchase_order_id: { $ref: '#/components/schemas/UUID' }
+        received_at: { type: string, format: date-time }
+        receiving_location_id: { $ref: '#/components/schemas/UUID' }
+    CustomerReturnLineInput:
+      type: object
+      required: [sku_id, qty, reason_code, disposition]
+      properties:
+        sku_id: { $ref: '#/components/schemas/UUID' }
+        qty: { $ref: '#/components/schemas/Quantity' }
+        serial_value: { type: string, nullable: true }
+        lot_code: { type: string, nullable: true }
+        reason_code: { type: string }
+        disposition: { $ref: '#/components/schemas/Disposition' }
+    CustomerReturnInput:
+      type: object
+      required: [lines]
+      properties:
+        original_sale_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        refund_method: { type: string, enum: [original_tender, store_credit, cash_in_drawer], nullable: true }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/CustomerReturnLineInput' }
+    VendorRmaInput:
+      type: object
+      required: [vendor_id, lines]
+      properties:
+        vendor_id: { $ref: '#/components/schemas/UUID' }
+        originating_purchase_order_id: { $ref: '#/components/schemas/UUID', nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [sku_id, qty]
+            properties:
+              sku_id: { $ref: '#/components/schemas/UUID' }
+              qty: { $ref: '#/components/schemas/Quantity' }
+              serial_value: { type: string, nullable: true }
+              lot_code: { type: string, nullable: true }
+              customer_return_line_id: { $ref: '#/components/schemas/UUID', nullable: true }
+    TransferInput:
+      type: object
+      required: [source_location_id, destination_location_id, lines]
+      properties:
+        source_location_id: { $ref: '#/components/schemas/UUID' }
+        destination_location_id: { $ref: '#/components/schemas/UUID' }
+        reason: { type: string, nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [sku_id, qty]
+            properties:
+              sku_id: { $ref: '#/components/schemas/UUID' }
+              qty: { $ref: '#/components/schemas/Quantity' }
+              serials:
+                type: array
+                description: Required for serialized SKUs; length must equal qty.
+                items: { type: string }
+              lot_code: { type: string, nullable: true }
+    CountSessionInput:
+      type: object
+      required: [name, scope_kind]
+      properties:
+        name: { type: string }
+        scope_kind: { type: string, enum: [full_store, by_location, by_category, by_vendor, by_sku_list] }
+        scope_filter:
+          type: object
+          additionalProperties: true
+          description: Concrete values for the chosen scope.
+        hide_system_qty: { type: boolean, default: false }
+    CountEntryInput:
+      type: object
+      required: [sku_id, location_id, counted_qty]
+      properties:
+        sku_id: { $ref: '#/components/schemas/UUID' }
+        location_id: { $ref: '#/components/schemas/UUID' }
+        counted_qty: { $ref: '#/components/schemas/Quantity' }
+        serial_value: { type: string, nullable: true }
+        lot_code: { type: string, nullable: true }
+    PosSaleIntake:
+      type: object
+      required: [client_intake_id, register_id, location_id, cashier_user_id, occurred_at, lines]
+      properties:
+        client_intake_id: { $ref: '#/components/schemas/UUID' }
+        register_id: { $ref: '#/components/schemas/UUID' }
+        location_id: { $ref: '#/components/schemas/UUID' }
+        cashier_user_id: { $ref: '#/components/schemas/UUID' }
+        occurred_at: { type: string, format: date-time }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [sku_id, qty]
+            properties:
+              sku_id: { $ref: '#/components/schemas/UUID' }
+              qty: { $ref: '#/components/schemas/Quantity' }
+              lot_code: { type: string, nullable: true }
+  responses:
+    BadRequest:
+      description: Validation failure (e.g., serial count != received_qty, lot missing for lot_tracked SKU).
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Caller's roles do not authorize this transition (FR-036).
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Idempotency conflict or business rule conflict (e.g., serial already sold).
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+paths:
+  /sites:
+    get:
+      summary: List sites for the caller's tenant.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Site' } } } } }
+  /locations:
+    get:
+      summary: List locations.
+      parameters:
+        - { name: site_id, in: query, schema: { $ref: '#/components/schemas/UUID' } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Location' } } } } }
+  /skus:
+    get:
+      summary: List or search SKUs.
+      parameters:
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Sku' } } } } }
+  /inventory/balances:
+    get:
+      summary: Inventory balances by SKU and/or location (FR-026).
+      parameters:
+        - { name: sku_id, in: query, schema: { $ref: '#/components/schemas/UUID' } }
+        - { name: location_id, in: query, schema: { $ref: '#/components/schemas/UUID' } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/InventoryBalance' } } } } }
+  /serials/{serial_value}:
+    get:
+      summary: Lookup-by-serial (FR-012).
+      parameters:
+        - { name: serial_value, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  serial: { $ref: '#/components/schemas/Serial' }
+                  history: { type: array, items: { $ref: '#/components/schemas/SerialHistoryEntry' } }
+        '404': { description: Not found }
+  /purchase-orders:
+    post:
+      summary: Create PO (Purchasing) — FR-001.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseOrderInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseOrder' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      summary: List POs.
+      parameters:
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/POState' } }
+        - { name: vendor_id, in: query, schema: { $ref: '#/components/schemas/UUID' } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PurchaseOrder' } } } } }
+  /purchase-orders/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } }
+    get:
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseOrder' } } } }
+  /purchase-orders/{id}/submit:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: draft → submitted (Purchasing).
+      responses: { '200': { description: OK }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /purchase-orders/{id}/approve:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: submitted → approved (Store Manager or Admin) — FR-003.
+      responses: { '200': { description: OK }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /purchase-orders/{id}/send:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: approved → sent (Purchasing).
+      responses: { '200': { description: OK } }
+  /purchase-orders/{id}/cancel:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: Cancel PO from a non-terminal state (Store Manager or Admin) — FR-002, FR-003.
+      responses: { '200': { description: OK }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /receipts:
+    post:
+      summary: Post a (possibly partial) PO receipt at a location (Receiver or Inventory Clerk) — FR-004, FR-005, FR-006, FR-009, FR-037.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReceiptInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Receipt' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /returns:
+    post:
+      summary: Post a customer return (Cashier; Store Manager approval required for no-receipt path per FR-014) — FR-013–FR-016, FR-018, FR-037.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CustomerReturnInput' } } }
+      responses:
+        '201': { description: Created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /vendor-rmas:
+    post:
+      summary: Create a vendor RMA (Inventory Clerk or Store Manager) — FR-017.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VendorRmaInput' } } }
+      responses:
+        '201': { description: Created }
+  /vendor-rmas/{id}/ship:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: open → shipped (Inventory Clerk or Store Manager) — FR-017, FR-018.
+      responses: { '200': { description: OK } }
+  /vendor-rmas/{id}/close:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: shipped → closed; serials advance to rma_closed (FR-018).
+      responses: { '200': { description: OK } }
+  /count-sessions:
+    post:
+      summary: Create a count session (Store Manager) — FR-019, FR-020, FR-022.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CountSessionInput' } } }
+      responses: { '201': { description: Created } }
+  /count-sessions/{id}/entries:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: Submit count entries — FR-021.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: array, items: { $ref: '#/components/schemas/CountEntryInput' } }
+      responses: { '202': { description: Accepted } }
+  /count-sessions/{id}/variance:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    get:
+      summary: Variance report (system_at_open vs counted) — FR-023.
+      responses: { '200': { description: OK } }
+  /count-sessions/{id}/approve:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: Approve session and post adjustments (Store Manager) — FR-024.
+      responses: { '200': { description: OK }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /transfers:
+    post:
+      summary: Create transfer (Inventory Clerk or Store Manager) — FR-027.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TransferInput' } } }
+      responses: { '201': { description: Created } }
+  /transfers/{id}/ship:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: draft → shipped; moves stock to virtual_in_transit; pins serials (FR-028, FR-029).
+      responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Conflict' } }
+  /transfers/{id}/receive:
+    parameters: [ { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/UUID' } } ]
+    post:
+      summary: shipped → received; moves stock from in_transit to destination (FR-028).
+      responses: { '200': { description: OK } }
+  /pos-intake/sales:
+    post:
+      summary: Idempotent intake for non-serialized POS sales captured offline (FR-034, R3).
+      description: |
+        Server treats `client_intake_id` as the idempotency key. A duplicate
+        returns 409 `already_processed` and is safe to retry from the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/PosSaleIntake' }
+      responses:
+        '202': { description: Accepted (queued or applied) }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: One or more envelopes had a duplicate client_intake_id.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
