@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pos_inventory_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pos_inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - pos_inventory_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pos_inventory"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pos_inventory_pgdata:

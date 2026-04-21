@@ -1,4 +1,4 @@
-import { getToken, getTenantId } from "./auth";
+import { getToken, getTenantId, getDevTenantId, getDevUserId, getDevRoles } from "./auth";
 
 const BASE = (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE ?? "/v1";
 
@@ -7,9 +7,17 @@ export type ApiError = { status: number; code: string; message: string; details?
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     const token = getToken();
-    if (token) headers["authorization"] = `Bearer ${token}`;
-    const tid = getTenantId();
-    if (tid) headers["x-tenant-id"] = tid;
+    if (token) {
+        headers["authorization"] = `Bearer ${token}`;
+        const tid = getTenantId();
+        if (tid) headers["x-tenant-id"] = tid;
+    } else {
+        // Dev fallback: no JWT issued yet. Send X-Dev-* headers that the
+        // backend honors when POS_INVENTORY_AUTH_BYPASS=true.
+        headers["x-dev-tenant"] = getDevTenantId();
+        headers["x-dev-user"] = getDevUserId();
+        headers["x-dev-roles"] = getDevRoles().join(",");
+    }
 
     const r = await fetch(`${BASE}${path}`, {
         method,
