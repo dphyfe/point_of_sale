@@ -18,7 +18,7 @@ from pos_inventory.persistence.repositories.customer_repo import (
 
 @dataclass(frozen=True)
 class SearchInput:
-    query: str
+    query: str | None
     include_inactive: bool = False
     limit: int = 50
     offset: int = 0

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 
 type ContactType = 'individual' | 'company';
@@ -24,32 +26,27 @@ interface SearchResponse {
 export function CustomerSearchPage() {
     const [q, setQ] = useState('');
     const [includeInactive, setIncludeInactive] = useState(false);
-    const [data, setData] = useState<SearchResponse | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
 
-    const search = async () => {
-        setError(null);
-        setLoading(true);
-        try {
-            const params = new URLSearchParams({ q, include_inactive: String(includeInactive) });
-            const r = await api.get<SearchResponse>(`/customers?${params.toString()}`);
-            setData(r);
-        } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const query = useQuery({
+        queryKey: ['customers', q.trim(), includeInactive],
+        queryFn: () => {
+            const params = new URLSearchParams();
+            if (q.trim()) params.set('q', q.trim());
+            params.set('include_inactive', String(includeInactive));
+            return api.get<SearchResponse>(`/customers?${params.toString()}`);
+        },
+    });
+
+    const data = query.data;
+    const isSearching = q.trim().length > 0;
 
     return (
         <section>
-            <h2>Customer Search</h2>
+            <h2>Customers</h2>
             <input
                 aria-label="customer search"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && q.trim() && search()}
                 placeholder="Phone, email, name, or loyalty ID"
             />
             <label>
@@ -60,39 +57,47 @@ export function CustomerSearchPage() {
                 />
                 Include inactive
             </label>
-            <button onClick={search} disabled={!q.trim() || loading}>
-                {loading ? 'Searching…' : 'Search'}
+            <button onClick={() => query.refetch()} disabled={query.isFetching}>
+                {query.isFetching ? 'Loading…' : 'Refresh'}
             </button>
-            {error && <p role="alert">{error}</p>}
+            {query.error && <p role="alert">{(query.error as Error).message}</p>}
             {data && (
                 <div>
-                    <p>{data.total} result(s)</p>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>State</th>
-                                <th>Tags</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {data.items.map((c) => (
-                                <tr key={c.id}>
-                                    <td>
-                                        <a href={`#/customers/${c.id}`}>{c.display_name}</a>
-                                    </td>
-                                    <td>{c.contact_type}</td>
-                                    <td>{c.email ?? ''}</td>
-                                    <td>{c.primary_phone ?? ''}</td>
-                                    <td>{c.state}</td>
-                                    <td>{c.tags.join(', ')}</td>
+                    <h3>
+                        {isSearching
+                            ? `Search results (${data.total})`
+                            : `Recent customers (${data.total})`}
+                    </h3>
+                    {data.items.length === 0 ? (
+                        <p>No customers found.</p>
+                    ) : (
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>State</th>
+                                    <th>Tags</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {data.items.map((c) => (
+                                    <tr key={c.id}>
+                                        <td>
+                                            <Link to={`/customers/${c.id}`}>{c.display_name}</Link>
+                                        </td>
+                                        <td>{c.contact_type}</td>
+                                        <td>{c.email ?? ''}</td>
+                                        <td>{c.primary_phone ?? ''}</td>
+                                        <td>{c.state}</td>
+                                        <td>{c.tags.join(', ')}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             )}
         </section>

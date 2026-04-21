@@ -97,7 +97,7 @@ def _read_payload(c: Customer, principal: Principal, sess: Session) -> CustomerR
     dependencies=[Depends(requires_role(*_READ_ROLES))],
 )
 def search_customers_endpoint(
-    q: str = Query(..., min_length=1, max_length=200),
+    q: str | None = Query(None, max_length=200),
     include_inactive: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),

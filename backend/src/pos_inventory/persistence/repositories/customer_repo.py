@@ -43,22 +43,26 @@ def _classify(query: str) -> tuple[str, str]:
 def search_customers(
     sess: Session,
     *,
-    query: str,
+    query: str | None,
     include_inactive: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> SearchResult:
-    mode, normalized = _classify(query)
-
+    q = (query or "").strip()
     stmt = select(Customer)
-    if mode == "phone":
-        stmt = stmt.where(Customer.phone_normalized.like(f"{normalized}%"))
-    elif mode == "email":
-        stmt = stmt.where(Customer.email_normalized.like(f"{normalized}%"))
+    if q:
+        mode, normalized = _classify(q)
+        if mode == "phone":
+            stmt = stmt.where(Customer.phone_normalized.like(f"{normalized}%"))
+        elif mode == "email":
+            stmt = stmt.where(Customer.email_normalized.like(f"{normalized}%"))
+        else:
+            ts = func.plainto_tsquery("simple", normalized)
+            stmt = stmt.where(Customer.search_vector.op("@@")(ts))
+            stmt = stmt.order_by(func.ts_rank_cd(Customer.search_vector, ts).desc())
     else:
-        ts = func.plainto_tsquery("simple", normalized)
-        stmt = stmt.where(Customer.search_vector.op("@@")(ts))
-        stmt = stmt.order_by(func.ts_rank_cd(Customer.search_vector, ts).desc())
+        # No query: surface most-recently-updated customers as a default list view.
+        stmt = stmt.order_by(Customer.updated_at.desc())
 
     if not include_inactive:
         stmt = stmt.where(Customer.state == "active")
